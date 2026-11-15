@@ -38,6 +38,26 @@ class ManifestTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     create_manifest(prefixes["bios"], prefixes["uefi"], root / "bad.json")
 
+    def test_manifest_with_upgrade_payload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prefixes = {}
+            for mode in ("bios", "uefi"):
+                prefix = root / f"ikuai-3.7.16-{mode}"
+                prefixes[mode] = prefix
+                body = bytearray(1024)
+                Path(str(prefix) + ".raw").write_bytes(body)
+                with gzip.open(str(prefix) + ".raw.gz", "wb") as target:
+                    target.write(body)
+            boot = root / "boot.ext2"
+            boot.write_bytes(b"PAYLOAD3726")
+            output = root / "manifest.json"
+            with patch("make_manifest.RAW_SIZE", 1024), patch("make_manifest.IDENTITY_OFFSET", 16):
+                digest = create_manifest(prefixes["bios"], prefixes["uefi"], output, boot_payload=str(boot))
+                manifest = json.loads(output.read_text())
+                self.assertEqual(manifest["upgrade"]["boot_payload"]["filename"], "boot.ext2")
+                self.assertEqual(manifest["upgrade"]["boot_payload"]["target_version"], "3.7.26")
+
 
 if __name__ == "__main__":
     unittest.main()

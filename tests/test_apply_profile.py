@@ -130,6 +130,56 @@ class ApplyProfileTests(unittest.TestCase):
                 f.seek(2048 * 512)
                 self.assertEqual(f.read(8), b"BOOT3726")
 
+    def test_upgrade_boot_uefi(self):
+        commands = []
+        def fake_run(*args, **kwargs):
+            commands.append(args[0])
+            if args[0] == "debugfs":
+                dest = Path(args[2].split()[2])
+                dest.write_bytes(b"dummy")
+            return b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            disk = Path(tmp) / "disk.img"
+            boot = Path(tmp) / "boot.ext2"
+            disk.write_bytes(bytes(102400 * 512 + 2048 * 512))
+            boot.write_bytes(b"BOOT3726")
+            with patch("apply_profile.run", side_effect=fake_run):
+                upgrade_boot(str(disk), str(boot), "uefi")
+            self.assertIn("debugfs", commands)
+            self.assertIn("mdel", commands)
+            self.assertIn("mcopy", commands)
+            self.assertIn("dd", commands)
+
+    def test_apply_profile_triggers_upgrade_boot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_file = Path(tmp) / "profile.json"
+            boot_payload = Path(tmp) / "boot.ext2"
+            boot_payload.write_bytes(b"3726_PAYLOAD")
+            profile_data = {
+                "disk_basename": "vda",
+                "boot_mode": "bios",
+                "raw_sha256": "a" * 64,
+                "boot_payload": str(boot_payload),
+                "network": {
+                    "mac": "52:54:00:12:34:56", "mode": "dhcp",
+                    "address": "10.0.0.2", "prefix": 24, "gateway": "10.0.0.1"
+                },
+                "web_password_md5": "b" * 32
+            }
+            profile_file.write_text(json.dumps(profile_data))
+            upgraded = {}
+            with patch("apply_profile.disk_size", return_value=8 * 1024**3), \
+                 patch("apply_profile.verify_image"), \
+                 patch("apply_profile.check_layout"), \
+                 patch("apply_profile.upgrade_boot", side_effect=lambda d, p, m: upgraded.update(payload=p, mode=m)), \
+                 patch("apply_profile.provision_identity"), \
+                 patch("apply_profile.replace_config"), \
+                 patch("apply_profile.expand_partitions"):
+                result = apply_profile("/dev/vda", str(profile_file))
+                self.assertEqual(upgraded["payload"], str(boot_payload))
+                self.assertEqual(upgraded["mode"], "bios")
+
 
 if __name__ == "__main__":
     unittest.main()

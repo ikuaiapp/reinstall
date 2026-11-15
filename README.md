@@ -1,7 +1,7 @@
 # 爱快 3.7.26 VPS 一键重装方案 (reinstall)
 
 这是面向 x86-64 Linux VPS 的整盘重装工具，会将目标磁盘重构并安装为原版爱快 3.7.26 路由器系统。
-本专用仓库迁移自 `https://github.com/ikuaiapp/reinstall`，采用严格的发布历史追踪：基础版本为 0.01，后续每完成一个云厂商适配与验证测试，版本号递增 0.01。
+本专用仓库迁移自 `https://github.com/ikuaiapp/ikuai-plus/tree/main/vps_reinstall`，采用严格的发布历史追踪：基础版本为 0.01，后续每完成一个云厂商适配与验证测试，版本号递增 0.01。
 
 ## 核心特性与默认配置
 

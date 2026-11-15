@@ -52,7 +52,7 @@ def patch_reinstall(source):
         "    warn false '救援 SSH：root，端口 22；密码是刚设置或自动生成的 10 位密码。'\n"
         '    warn false "安装进度网页：$(get_http_log_url)；仅在救援环境运行时可访问。"\n'
         '    warn false "完成后访问：http://${IKUAI_PUBLIC_IP:-公网IP}:88 或 https://${IKUAI_PUBLIC_IP:-公网IP}:448；账号 admin，密码与救援 SSH 相同。"\n'
-        "    warn false '新系统 SSH 默认关闭（已预置 iksshd 账户）；需要时可在爱快管理界面开启。'\n"
+        "    warn false '新系统 SSH 默认开启，端口 22，账号 iksshd。'\n"
         "    warn false '**********************************'\n"
         "}",
     )
@@ -128,6 +128,9 @@ def patch_reinstall(source):
         "    cp \"$IKUAI_APPLY\" $initrd_dir/configs/apply_profile.py\n"
         "    cp \"$IKUAI_LIB\" $initrd_dir/configs/ikuai.py\n"
         "    cp \"$IKUAI_LOGVIEWER\" $initrd_dir/configs/rescue_logviewer.html\n"
+        '    if [ -n "${IKUAI_BOOT_PAYLOAD:-}" ] && [ -f "$IKUAI_BOOT_PAYLOAD" ]; then\n'
+        '        cp "$IKUAI_BOOT_PAYLOAD" $initrd_dir/configs/boot.ext2\n'
+        "    fi\n"
         "    printf '%s\\n' \"$IKUAI_DISK_BASENAME\" >$initrd_dir/configs/ikuai-disk\n"
         "    printf '%s\\n' \"$IKUAI_BOOT_MODE\" >$initrd_dir/configs/ikuai-boot-mode\n"
         "    printf '%s  %s\\n' \"$IKUAI_COMPRESSED_SHA256\" /tmp/ikuai.raw.gz "
@@ -218,9 +221,13 @@ def patch_trans(source):
         source,
         'if [ "$hold" = 2 ]; then\n    info "hold 2"\n    exit\nfi\n\n# swapoff -a',
         'if [ -f /configs/ikuai-profile.json ]; then\n'
-        '    apk add python3 sfdisk util-linux-misc e2fsprogs e2fsprogs-extra\n'
+        '    apk add python3 sfdisk util-linux-misc e2fsprogs e2fsprogs-extra mtools\n'
         '    python3 -c "import sqlite3"\n'
-        '    python3 /configs/apply_profile.py --disk /dev/$xda --profile /configs/ikuai-profile.json\n'
+        '    if [ -f /configs/boot.ext2 ]; then\n'
+        '        python3 /configs/apply_profile.py --disk /dev/$xda --profile /configs/ikuai-profile.json --boot-payload /configs/boot.ext2\n'
+        '    else\n'
+        '        python3 /configs/apply_profile.py --disk /dev/$xda --profile /configs/ikuai-profile.json\n'
+        '    fi\n'
         '    sync\n'
         '    reboot\n'
         '    exit\n'

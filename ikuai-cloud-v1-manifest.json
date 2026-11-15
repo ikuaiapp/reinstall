@@ -2,14 +2,22 @@
   "format": "ikuai-cloud-v1",
   "images": {
     "bios": {
-      "filename": "ikuai-3.7.26-bios.raw.gz",
+      "filename": "ikuai-3.7.16-bios.raw.gz",
       "raw_sha256": "4233d6b9b207f743dfd2a196ba7ff0cafb851d2ff13c7a385134e9039ffc2688",
       "sha256": "a11673f6c83bc242f990aac380571b4e503c4b0d22c29292ed77e864d0363b21"
     },
     "uefi": {
-      "filename": "ikuai-3.7.26-uefi.raw.gz",
+      "filename": "ikuai-3.7.16-uefi.raw.gz",
       "raw_sha256": "34f697b4bb5587b4bb04f6b3b6f36a2601c1a87e73e494f317ae50e248b52ce7",
       "sha256": "e44db656df17e33697bb8a177354a6b2ac19309bc593ff88a222ccf88fef2a57"
     }
+  },
+  "upgrade": {
+    "boot_payload": {
+      "filename": "boot.ext2",
+      "sha256": "85816dd3f409e80aa78e35ae5a6421950f2f7cf8fed18a5477959b9c689e65e3",
+      "target_version": "3.7.26"
+    }
   }
 }
+

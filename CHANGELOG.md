@@ -30,9 +30,10 @@ This repository follows a strict incremental release versioning policy:
 - Preserved `iksshd` account setup script across provisioning and profile application routines.
 
 ### iKuai Base Version 3.7.26 Automation (R4)
-- Extracted official 3.7.26 boot partition payload from `iKuai8_x64_3.7.26_Build202609111743.bin`.
-- Automated writing of genuine 3.7.26 boot payload during the reinstall stage to achieve native 3.7.26 installation without post-reboot manual user intervention.
-- Updated manifest and bootstrap references to 3.7.26.
+- Extracted official 3.7.26 boot partition payload from `iKuai8_x64_3.7.26_Build202609111743.bin` (`boot.ext2`, SHA-256 `85816dd3f409e80aa78e35ae5a6421950f2f7cf8fed18a5477959b9c689e65e3`).
+- Automated staging and writing of genuine 3.7.26 boot payload during the reinstall pipeline (`stage_rescue.py` -> rescue initrd `/configs/boot.ext2` -> `apply_profile.py` `upgrade_boot()`).
+- Integrated Alpine `mtools` (`mdel`/`mcopy`) for seamless UEFI ESP rootfs/vmlinuz deployment.
+- Accurately documented base raw disk images (3.7.16) and 3.7.26 upgrade payload in `ikuai-cloud-v1-manifest.json` and `SHA256SUMS`.
 
 ### Sanitization, Documentation & Release Packaging (R5)
 - Sanitized real server IP addresses in documentation and tests using RFC 5737 documentation prefix addresses (`198.51.100.x` and `203.0.113.x`).

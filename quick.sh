@@ -14,8 +14,8 @@ if [[ ! -r /dev/tty ]]; then
 fi
 
 release='https://github.com/ikuaiapp/reinstall/releases/download/v0.01'
-source_sha='ab9e126638885a81dab2625e8d705c3eb80ab2df8949055b01d2349ccdf28b39'
-manifest_sha='13048e0c9b6b2b069ef8014e02af21214286e8d1f822e0ae149aff548bc20449'
+source_sha='8ad279cdae5c99e37a0f819812263821ece3d4365b5cba0c7be55cc51c86dbfa'
+manifest_sha='d32f1c0e072b3f2009f4a9fd188db1483cf4d229abe4241af0fb892b67f255aa'
 provider_args=()
 if public_ip=$(curl --noproxy '*' -fsS --max-time 3 \
     http://169.254.0.23/latest/meta-data/public-ipv4 2>/dev/null); then

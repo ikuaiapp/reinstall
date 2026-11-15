@@ -21,17 +21,19 @@ The installer operates via a multi-stage pipeline: host preflight -> Alpine RAM 
 +---------------------------------------------------------------------------------------+
 |  Rescue OS Staging & Execution (stage_rescue.py, vendor/reinstall.sh, vendor/trans.sh)|
 |  - Patches upstream netboot installer with pinned Alpine 3.24.3 checksums             |
-|  - Injects install profile, ikuai.py, apply_profile.py into initramfs configs         |
+|  - Injects install profile, ikuai.py, apply_profile.py, boot.ext2 into rescue initrd  |
+|  - Injects mtools into Alpine rescue environment for UEFI boot payload replacement    |
 |  - Modifies GRUB / EFI NVRAM to reboot into Alpine memory rescue OS                   |
 +------------------------------------------+--------------------------------------------+
                                            |
                                            v
 +---------------------------------------------------------------------------------------+
 |  Disk Image Flashing & Partition Customization (trans.sh, apply_profile.py)           |
-|  - Downloads / decompresses disk image or writes 3.7.26 boot payload (Option B1)      |
+|  - Downloads / verifies base raw image (3.7.16) and writes to disk block device       |
+|  - Automatically deploys 3.7.26 boot payload (/configs/boot.ext2) via upgrade_boot()  |
 |  - Generates 16-byte random hardware identity into Partition 2                        |
 |  - Injects WAN network profile and Web/SSH ports into Partition 3 (/ikuai/config.db)  |
-|  - Ensures iksshd root credentials exist and SSH service is enabled                   |
+|  - Ensures iksshd root credentials exist and SSH service is enabled (port 22)         |
 |  - Resizes Partition 6 (data) to consume entire remaining disk space                  |
 |  - Reboots directly into genuine iKuai 3.7.26                                         |
 +---------------------------------------------------------------------------------------+
@@ -154,8 +156,8 @@ bash -n quick.sh vendor/*.sh
 # 3. Version String Integrity
 cat VERSION    # Must output exactly: 0.01
 
-# 4. Sensitive IP Address Scan (Must return 0 hits for real IPs)
-grep -rn -E '64\.188|45\.125|132\.145|43\.156' .
+# 4. Sensitive IP Address & Path Scan (Must return 0 hits for real IPs and host paths)
+grep -rn -E '64\.188|45\.125|132\.145|43\.156|146\.235|10\.0\.0\.241|203\.0\.114|/vol1/1000' .
 
 # 5. Git Status Check
 git status     # Ensure working tree is clean and untracked files are handled
@@ -170,18 +172,21 @@ To generate v0.01 release assets:
 1. **Source Archive**:
    ```bash
    tar --exclude-vcs --exclude='*.pyc' --exclude='__pycache__' \
-       --exclude='*.raw*' --exclude='*.img' --exclude='*.ext*' \
+       --exclude='*.raw*' --exclude='*.img' --exclude='*.ext*' --exclude='*.tar.gz' \
+       --exclude='quick.sh' --exclude='SHA256SUMS' \
        -czf ikuai-vps-reinstall-source.tar.gz .
    ```
 2. **Manifest Generation**:
    ```bash
-   python3 make_manifest.py --bios-prefix /path/to/ikuai-3.7.26-bios \
-                            --uefi-prefix /path/to/ikuai-3.7.26-uefi \
+   python3 make_manifest.py --bios-prefix /path/to/ikuai-3.7.16-bios \
+                            --uefi-prefix /path/to/ikuai-3.7.16-uefi \
+                            --boot-payload /path/to/boot.ext2 \
                             --output ikuai-cloud-v1-manifest.json
    ```
 3. **Checksum Compilation**:
    ```bash
-   sha256sum ikuai-vps-reinstall-source.tar.gz quick.sh ikuai-cloud-v1-manifest.json > SHA256SUMS
+   sha256sum ikuai-3.7.16-bios.raw.gz ikuai-3.7.16-uefi.raw.gz boot.ext2 \
+             ikuai-cloud-v1-manifest.json ikuai-vps-reinstall-source.tar.gz quick.sh > SHA256SUMS
    ```
 4. **Git Tag & Release**:
    ```bash

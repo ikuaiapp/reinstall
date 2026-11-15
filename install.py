@@ -277,7 +277,7 @@ def load_manifest(url, expected_sha256):
 def image_from_manifest(manifest_url, manifest, mode):
     entry = manifest["images"][mode]
     name = entry["filename"]
-    if not re.fullmatch(r"ikuai-3\.7\.16-(?:bios|uefi)\.raw\.gz", name):
+    if not re.fullmatch(r"ikuai-(?:3\.7\.16|3\.7\.26)-(?:bios|uefi)\.raw\.gz", name):
         raise ValueError("unexpected image asset name")
     if mode not in name or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):
         raise ValueError("image manifest mode or compressed digest mismatch")
@@ -325,11 +325,42 @@ def require_web_password():
     return first
 
 
-def execute(preview, image_url, image, password):
+BOOT_PAYLOAD_SHA256 = "85816dd3f409e80aa78e35ae5a6421950f2f7cf8fed18a5477959b9c689e65e3"
+BOOT_PAYLOAD_SIZE = 52428800
+
+
+def resolve_boot_payload(manifest_url=None, manifest=None, explicit_path=None):
+    if explicit_path:
+        p = Path(explicit_path)
+        if not p.is_file():
+            raise FileNotFoundError(f"boot payload not found: {p}")
+        return p
+    for candidate in (HERE / "boot.ext2", HERE.parent / "boot.ext2", Path("/configs/boot.ext2")):
+        if candidate.is_file() and candidate.stat().st_size == BOOT_PAYLOAD_SIZE:
+            return candidate
+    if manifest_url:
+        base = manifest_url.rsplit("/", 1)[0]
+        filename = "boot.ext2"
+        if manifest and "upgrade" in manifest and "boot_payload" in manifest["upgrade"]:
+            filename = manifest["upgrade"]["boot_payload"].get("filename", "boot.ext2")
+        dest = HERE / filename
+        url = base + "/" + filename
+        try:
+            urllib.request.urlretrieve(url, str(dest))
+            if dest.stat().st_size == BOOT_PAYLOAD_SIZE:
+                return dest
+        except Exception:
+            pass
+    return None
+
+
+def execute(preview, image_url, image, password, boot_payload=None):
     if os.geteuid() != 0:
         raise PermissionError("--execute requires root")
     rescue_password = password
     web_md5 = hashlib.md5(password.encode()).hexdigest()
+    if boot_payload is None:
+        boot_payload = resolve_boot_payload()
     with tempfile.TemporaryDirectory(prefix="ikuai-vps-stage-") as directory:
         root = Path(directory)
         vendor = stage(root / "vendor")
@@ -339,6 +370,8 @@ def execute(preview, image_url, image, password):
                    "raw_sha256": image["raw_sha256"],
                    "network": preview["network"],
                    "web_password_md5": web_md5}
+        if boot_payload and Path(boot_payload).is_file():
+            payload["boot_payload"] = "/configs/boot.ext2"
         profile.write_text(json.dumps(payload))
         profile.chmod(0o600)
         env = os.environ.copy()
@@ -351,6 +384,8 @@ def execute(preview, image_url, image, password):
                    IKUAI_BOOT_MODE=payload["boot_mode"],
                    IKUAI_COMPRESSED_SHA256=image["sha256"],
                    IKUAI_RESCUE_PASSWORD=rescue_password)
+        if boot_payload and Path(boot_payload).is_file():
+            env["IKUAI_BOOT_PAYLOAD"] = str(boot_payload)
         print("Rescue SSH user: root; password: same as the new iKuai Web admin password", flush=True)
         print("Rescue will reboot once, download and verify the image, write the selected disk, "
               "configure WAN/Web, then reboot. A failure leaves rescue SSH active.", flush=True)
@@ -364,6 +399,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest-url", required=True)
     parser.add_argument("--manifest-sha256", required=True)
+    parser.add_argument("--boot-payload",
+                        help="optional path to 3.7.26 boot payload (default: auto-detected or downloaded)")
     parser.add_argument("--execute", action="store_true",
                         help="confirm and stage an irreversible system-disk rewrite")
     parser.add_argument("--tencent-nat-public-ip",
@@ -376,7 +413,7 @@ def main():
     manifest = load_manifest(args.manifest_url, args.manifest_sha256)
     image_url, image = image_from_manifest(args.manifest_url, manifest, preview["boot_mode"])
     print(json.dumps({"preflight": preview, "image": image_url,
-                      "compressed_sha256": image["sha256"]}, indent=2, ensure_ascii=False))
+                       "compressed_sha256": image["sha256"]}, indent=2, ensure_ascii=False))
     print("Confirm the cloud security group allows inbound TCP 88 and 448 (Web) and TCP 22 (SSH) to this VPS.")
     if not args.execute:
         print("Preflight only: no reboot or disk write. Use --execute to continue.")
@@ -385,7 +422,8 @@ def main():
     answer = input(f"Type ERASE {preview['disk']} to destroy that disk and stage rescue: ")
     if answer != f"ERASE {preview['disk']}":
         raise ValueError("confirmation did not match; no changes made")
-    execute(preview, image_url, image, password)
+    boot_payload = resolve_boot_payload(args.manifest_url, manifest, getattr(args, "boot_payload", None))
+    execute(preview, image_url, image, password, boot_payload=boot_payload)
 
 
 if __name__ == "__main__":

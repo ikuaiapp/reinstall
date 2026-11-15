@@ -45,28 +45,28 @@ class InstallerTests(unittest.TestCase):
 
     def test_oracle_static_nat_requires_matching_source_config(self):
         network = {"mac": "02:00:17:02:6c:ec", "mode": "static",
-                   "address": "10.0.0.241", "prefix": 24, "gateway": "10.0.0.1"}
-        vnic = {"macAddr": "02:00:17:02:6C:EC", "privateIp": "10.0.0.241",
+                   "address": "10.0.0.2", "prefix": 24, "gateway": "10.0.0.1"}
+        vnic = {"macAddr": "02:00:17:02:6C:EC", "privateIp": "10.0.0.2",
                 "subnetCidrBlock": "10.0.0.0/24", "virtualRouterIp": "10.0.0.1"}
         with patch("install.oracle_metadata_vnics", return_value=[vnic]), \
-             patch("install.external_ipv4", return_value="146.235.204.167"), \
+             patch("install.external_ipv4", return_value="198.51.100.167"), \
              patch("install.confirmed_ifupdown_static", return_value=True):
-            self.assertEqual(verify_oracle_nat(network, "146.235.204.167", "ens3"), "146.235.204.167")
+            self.assertEqual(verify_oracle_nat(network, "198.51.100.167", "ens3"), "198.51.100.167")
             with patch("install.confirmed_ifupdown_static", return_value=False):
                 with self.assertRaisesRegex(ValueError, "static source"):
-                    verify_oracle_nat(network, "146.235.204.167", "ens3")
+                    verify_oracle_nat(network, "198.51.100.167", "ens3")
 
     def test_static_source_must_match_address_prefix_gateway_and_interface(self):
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "interfaces"
             config.write_text("auto lo\niface lo inet loopback\n"
                               "allow-hotplug ens3\niface ens3 inet static\n"
-                              "  address 10.0.0.241/24\n  gateway 10.0.0.1\n")
-            self.assertTrue(confirmed_ifupdown_static("ens3", "10.0.0.241", 24, "10.0.0.1", config))
-            self.assertFalse(confirmed_ifupdown_static("ens4", "10.0.0.241", 24, "10.0.0.1", config))
-            self.assertFalse(confirmed_ifupdown_static("ens3", "10.0.0.242", 24, "10.0.0.1", config))
+                              "  address 10.0.0.2/24\n  gateway 10.0.0.1\n")
+            self.assertTrue(confirmed_ifupdown_static("ens3", "10.0.0.2", 24, "10.0.0.1", config))
+            self.assertFalse(confirmed_ifupdown_static("ens4", "10.0.0.2", 24, "10.0.0.1", config))
+            self.assertFalse(confirmed_ifupdown_static("ens3", "10.0.0.3", 24, "10.0.0.1", config))
             config.write_text(config.read_text() + "iface ens3 inet dhcp\n")
-            self.assertFalse(confirmed_ifupdown_static("ens3", "10.0.0.241", 24, "10.0.0.1", config))
+            self.assertFalse(confirmed_ifupdown_static("ens3", "10.0.0.2", 24, "10.0.0.1", config))
 
     def test_oracle_dhcp_from_main_interfaces_file(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -88,7 +88,7 @@ class InstallerTests(unittest.TestCase):
         patched = patch_reinstall(source)
         self.assertIn("救援 SSH：root，端口 22", patched)
         self.assertIn("账号 admin，密码与救援 SSH 相同", patched)
-        self.assertIn("新系统 SSH 默认关闭", patched)
+        self.assertIn("新系统 SSH 默认开启，端口 22，账号 iksshd", patched)
         self.assertIn("此阶段不再提供取消命令", patched)
         self.assertIn('IKUAI_PUBLIC_IP:-IP', patched)
         self.assertNotIn("镜像的用户名/密码/公钥不会被修改。", patched)
@@ -218,6 +218,9 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("target disk changed", trans)
             self.assertIn("boot mode changed", trans)
             self.assertIn("python3 /configs/apply_profile.py", trans)
+            self.assertIn("mtools", trans)
+            self.assertIn('--boot-payload /configs/boot.ext2', trans)
+            self.assertIn('cp "$IKUAI_BOOT_PAYLOAD" $initrd_dir/configs/boot.ext2', reinstall)
             self.assertIn('password="${IKUAI_RESCUE_PASSWORD:?missing rescue password}"', reinstall)
             self.assertIn('confhome_cn="file://$IKUAI_VENDOR_DIR"', reinstall)
             self.assertNotIn("https://cnb.cool/bin456789/reinstall/-/git/raw/main", reinstall)
@@ -261,6 +264,7 @@ class InstallerTests(unittest.TestCase):
              patch("install.subprocess.run", side_effect=record_run):
             execute(preview, "https://example.invalid/image.gz", image, "Abcde12345")
         self.assertEqual(captured["environment"]["IKUAI_PUBLIC_IP"], "8.8.8.8")
+        self.assertIn("IKUAI_BOOT_PAYLOAD", captured["environment"])
         self.assertIn("--web-port", captured["command"])
         self.assertEqual(captured["command"][captured["command"].index("--web-port") + 1], "443")
 

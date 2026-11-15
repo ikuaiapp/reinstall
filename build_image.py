@@ -17,8 +17,7 @@ import tempfile
 from pathlib import Path
 
 for _market_path in (Path(__file__).resolve().parents[1] / "local_market_build",
-                     Path(__file__).resolve().parents[2] / "3.7.16" / "local_market_build",
-                     Path("/vol1/1000/4.0/3.7.16/local_market_build")):
+                     Path(__file__).resolve().parents[2] / "3.7.16" / "local_market_build"):
     if _market_path.is_dir():
         sys.path.insert(0, str(_market_path))
         break
