@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Disk images and firmware binaries
+*.img
+*.raw
+*.raw.gz
+*.iso
+*.bin
+*.ext2
+*.ext4
+
+# Temporary files and directories
+*.tmp
+/tmp
+*.swp
+*~
+.DS_Store
+
+# Release output archives (generated during packaging)
+ikuai-vps-reinstall-source.tar.gz
