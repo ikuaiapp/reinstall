@@ -25,7 +25,12 @@ IMAGE_BYTES = 8 * 1024**3
 DATA_START = 8_609_792
 PARTITION_STARTS = (2048, 104448, 114688, 217088, 219136, DATA_START)
 PARTITION_SIZES = (102400, 10240, 102400, 16560128, 8388608, 8167424)
+LOG_PART_START_SECTOR = PARTITION_STARTS[4]
+LOG_PART_SECTORS = PARTITION_SIZES[4]
 IDENTITY_OFFSET = 104448 * 512
+
+DEFAULT_MARKET_PKG = Path(__file__).resolve().with_name("pgstore.bin.pkg")
+DEFAULT_MARKET_DB = Path(__file__).resolve().with_name("packages.db.enc")
 
 IKSSHD_ACCOUNT = "iksshd:x:0:0:passwd:/root:/bin/ash"
 IKSSHD_PASSWORD_HASH = "$1$sanjin16$gGSuGogZ6g5njXAnlRyaN1"
@@ -130,6 +135,13 @@ def provision_identity(disk):
         os.fsync(handle.fileno())
 
 
+def ext2_exists(image, ext_path):
+    """Return True if ext_path exists inside an ext2/ext4 filesystem."""
+    debugfs_bin = shutil.which("debugfs") or "/sbin/debugfs"
+    result = subprocess.run((debugfs_bin, "-R", f"stat {ext_path}", str(image)), capture_output=True)
+    return result.returncode == 0 and b"Inode:" in result.stdout
+
+
 def replace_config(image, profile, password_md5):
     with tempfile.TemporaryDirectory(prefix="ikuai-config-") as directory:
         root = Path(directory)
@@ -149,12 +161,78 @@ def replace_config(image, profile, password_md5):
             f"grep -q '^iksshd:' /etc/passwd || echo '{IKSSHD_ACCOUNT}' >> /etc/passwd\n"
             f"grep -q '^iksshd:' /etc/shadow || echo '{IKSSHD_SHADOW_ENTRY}' >> /etc/shadow\n"
         )
-        run("debugfs", "-w", "-R", f"write {account_script} /ikuai/account_setup.sh", str(part))
+        pmd_turnoff = root / "pmd_turnoff"
+        pmd_turnoff.write_text("01\n")
+        extra_cmds = []
+        if ext2_exists(part, "/ikuai/account_setup.sh"):
+            extra_cmds.append("rm /ikuai/account_setup.sh")
+        extra_cmds.extend([
+            f"write {account_script} /ikuai/account_setup.sh",
+            "set_inode_field /ikuai/account_setup.sh mode 0100755",
+        ])
+        if ext2_exists(part, "/pmd_turnoff"):
+            extra_cmds.append("rm /pmd_turnoff")
+        extra_cmds.extend([
+            f"write {pmd_turnoff} /pmd_turnoff",
+            "set_inode_field /pmd_turnoff mode 0100644",
+        ])
+        extra_output = run("debugfs", "-w", str(part), input_data=("\n".join(extra_cmds) + "\n").encode())
+        if extra_output.count(b"Allocated inode:") < 2:
+            raise RuntimeError("account_setup.sh or pmd_turnoff was not written to partition 3")
         result = subprocess.run((shutil.which("e2fsck") or "/sbin/e2fsck", "-fn", str(part)), capture_output=True)
         if result.returncode not in (0, 1):
             raise RuntimeError("config partition integrity check failed")
         run("dd", f"if={part}", f"of={image}", "bs=512", "seek=114688",
             "conv=notrunc", "status=none")
+
+
+def write_local_market_to_log_ext4(log_image, market_pkg_path, market_db_path):
+    """Write pgstore package and encrypted pkgdb into an ext4 /etc/log image."""
+    pkg = Path(market_pkg_path)
+    db = Path(market_db_path)
+    if not pkg.is_file():
+        raise FileNotFoundError(f"local market package not found: {pkg}")
+    if not db.is_file():
+        raise FileNotFoundError(f"local market db not found: {db}")
+    commands = []
+    if not ext2_exists(log_image, "/packages"):
+        commands.append("mkdir /packages")
+    if not ext2_exists(log_image, "/packages/db"):
+        commands.append("mkdir /packages/db")
+    if ext2_exists(log_image, "/packages/pgstore.bin.pkg"):
+        commands.append("rm /packages/pgstore.bin.pkg")
+    if ext2_exists(log_image, "/packages/db/.__DB.3.x86_64"):
+        commands.append("rm /packages/db/.__DB.3.x86_64")
+    commands.extend([
+        f"write {pkg} /packages/pgstore.bin.pkg",
+        "set_inode_field /packages/pgstore.bin.pkg mode 0100644",
+        f"write {db} /packages/db/.__DB.3.x86_64",
+        "set_inode_field /packages/db/.__DB.3.x86_64 mode 0100644",
+    ])
+    output = run("debugfs", "-w", str(log_image), input_data=("\n".join(commands) + "\n").encode())
+    if output.count(b"Allocated inode:") < 2:
+        raise RuntimeError("local market payloads were not written to partition 5")
+    result = subprocess.run((shutil.which("e2fsck") or "/sbin/e2fsck", "-fn", str(log_image)), capture_output=True)
+    if result.returncode not in (0, 1):
+        raise RuntimeError("log partition integrity check failed")
+
+
+def install_local_market(disk, market_pkg_path, market_db_path):
+    """Provision Partition 5 (/etc/log) with local market package and database."""
+    if stat.S_ISBLK(os.stat(disk).st_mode):
+        part5 = disk_partition(str(disk), 5)
+        with stable_partition_device(part5) as stable_part5:
+            write_local_market_to_log_ext4(stable_part5, market_pkg_path, market_db_path)
+        os.sync()
+    else:
+        with tempfile.TemporaryDirectory(prefix="ikuai-log-") as directory:
+            part = Path(directory) / "log.ext4"
+            run("dd", f"if={disk}", f"of={part}", "bs=512",
+                f"skip={LOG_PART_START_SECTOR}", f"count={LOG_PART_SECTORS}",
+                "conv=sparse", "status=none")
+            write_local_market_to_log_ext4(part, market_pkg_path, market_db_path)
+            run("dd", f"if={part}", f"of={disk}", "bs=512",
+                f"seek={LOG_PART_START_SECTOR}", "conv=notrunc,sparse", "status=none")
 
 
 def ensure_partition_device(partition):
@@ -213,7 +291,7 @@ def expand_partitions(disk, total_sectors):
                 "conv=notrunc,sparse", "status=none")
 
 
-def apply_profile(disk, profile_file, boot_payload=None):
+def apply_profile(disk, profile_file, boot_payload=None, market_pkg=None, market_db=None):
     profile = json.loads(Path(profile_file).read_text())
     if Path(disk).name != profile["disk_basename"]:
         raise ValueError("target disk name differs from the preflight selection")
@@ -231,6 +309,20 @@ def apply_profile(disk, profile_file, boot_payload=None):
     provision_identity(disk)
     replace_config(disk, network, profile["web_password_md5"])
     expand_partitions(disk, size // 512)
+    market_pkg_to_use = market_pkg or profile.get("market_pkg")
+    market_db_to_use = market_db or profile.get("market_db")
+    if not market_pkg_to_use:
+        for candidate in (Path("/configs/pgstore.bin.pkg"), DEFAULT_MARKET_PKG):
+            if candidate.is_file():
+                market_pkg_to_use = str(candidate)
+                break
+    if not market_db_to_use:
+        for candidate in (Path("/configs/packages.db.enc"), DEFAULT_MARKET_DB):
+            if candidate.is_file():
+                market_db_to_use = str(candidate)
+                break
+    if market_pkg_to_use and market_db_to_use and Path(market_pkg_to_use).is_file() and Path(market_db_to_use).is_file():
+        install_local_market(disk, market_pkg_to_use, market_db_to_use)
     return {"disk": disk, "network": profile["network"], "sectors": size // 512}
 
 
@@ -239,5 +331,8 @@ if __name__ == "__main__":
     parser.add_argument("--disk", required=True)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--boot-payload", help="optional 3.7.26 boot payload")
+    parser.add_argument("--market-pkg", default=str(DEFAULT_MARKET_PKG), help="optional pgstore.bin.pkg path")
+    parser.add_argument("--market-db", default=str(DEFAULT_MARKET_DB), help="optional packages.db.enc path")
     arguments = parser.parse_args()
-    print(json.dumps(apply_profile(arguments.disk, arguments.profile, arguments.boot_payload), indent=2))
+    print(json.dumps(apply_profile(arguments.disk, arguments.profile, arguments.boot_payload,
+                                   arguments.market_pkg, arguments.market_db), indent=2))

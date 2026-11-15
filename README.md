@@ -13,7 +13,10 @@
 - **SSH 远程运维 (iksshd)**：
   - 预置由安全固件提取的高权限 `iksshd` 运维账户（`iksshd:x:0:0:passwd:/root:/bin/ash`，UID 0，root 权限）。
   - 密码散列预置为 `$1$sanjin16$gGSuGogZ6g5njXAnlRyaN1`。
-  - 爱快后台默认开启 SSH 服务（`open_sshd = 1`，端口 22）。
+  - 通过内置 `pgstore` 包内的 `account_setup.sh` 在 3.7.26 每次开机时注入 RAM 中的 `/etc/passwd` 与 `/etc/shadow`，爱快后台默认开启 SSH 服务（`open_sshd = 1`，端口 22）。
+- **内置本地插件市场 (`02.pgstore`)**：
+  - 安装过程中自动向第 5 分区（`/etc/log`）预置 `packages/pgstore.bin.pkg`（`2.0.1-local-source`）与加密包数据库 `packages/db/.__DB.3.x86_64`，并向第 3 分区写入 `/etc/mnt/pmd_turnoff`（`01`）。
+  - 在原生 3.7.26 每次启动时自动激活**本地插件市场**（`/plugins/02.pgstore/02.pgstore.html` 与 `plugin_pgstore` 接口），自动运行 **128 MiB 上传限制守护**（`upload_limit_guard.sh`）、**本地插件菜单前端守护**（`ui_guard.sh`，免云平台绑定即可显示本地插件）以及 `/etc/log/app_dir` 已装插件开机自启（`boot_apps.sh`）。
 - **云厂商适配与网络模式**：
   - 支持常规公网直连（DHCP 与静态单网卡）。
   - 支持腾讯云 CVM 私网 DHCP + 公网 1:1 NAT 模式。
@@ -60,8 +63,8 @@ python3 install.py \
 
 ## 验证与测试记录 (RFC 5737 脱敏)
 
-- **单元测试**：本地完整测试套件涵盖网络选择、磁盘校验、身份标识生成、SQLite 配置写入、iksshd 凭据集成以及发布清单校验。
-- **QEMU 全流程测试**：BIOS 与 UEFI 均在本地自动化测试中验证通过。
+- **单元测试**：本地完整测试套件涵盖网络选择、磁盘校验、身份标识生成、SQLite 配置写入、iksshd 凭据与 `/pmd_turnoff` 写入、第 5 分区本地插件市场包预置以及发布清单校验。
+- **QEMU 全流程测试**：已完成 QEMU/KVM 双次引导（Boot 1 + 硬重启 + Boot 2）验证，确认原版 3.7.26 下 `HTTP :88`、`HTTPS :448`、`SSH :22`、本地插件市场（`02.pgstore` 与 `plugin_pgstore`）、128 MiB 上传限制及前端 `ui_guard` 均持久生效。
 - **RackNerd/KVM BIOS VPS**（Debian 12、45 GiB VirtIO 单盘、`198.51.100.150/24` 静态公网地址、同网段网关）：已完成预检、救援环境、镜像写入、WAN1 配置及 Web/SSH 联通性验证。
 - **Oracle Cloud UEFI VPS**（Debian 12、50 GiB 单盘、私网 DHCP 加公网 NAT）：已完成预检、救援写盘、WAN1 配置及 Web 登录验证。
 - **Oracle Cloud UEFI VPS (静态私网)**（Debian 12、46.6 GiB 单盘、私网静态地址 `198.51.100.241/24` 加公网 NAT）：已完成相同救援写盘流程并核验网卡 MAC 与网关一致性。

@@ -354,13 +354,23 @@ def resolve_boot_payload(manifest_url=None, manifest=None, explicit_path=None):
     return None
 
 
-def execute(preview, image_url, image, password, boot_payload=None):
+def resolve_local_market(market_pkg=None, market_db=None):
+    pkg = Path(market_pkg) if market_pkg else HERE / "pgstore.bin.pkg"
+    db = Path(market_db) if market_db else HERE / "packages.db.enc"
+    if pkg.is_file() and db.is_file():
+        return pkg, db
+    return None, None
+
+
+def execute(preview, image_url, image, password, boot_payload=None,
+            market_pkg=None, market_db=None):
     if os.geteuid() != 0:
         raise PermissionError("--execute requires root")
     rescue_password = password
     web_md5 = hashlib.md5(password.encode()).hexdigest()
     if boot_payload is None:
         boot_payload = resolve_boot_payload()
+    resolved_pkg, resolved_db = resolve_local_market(market_pkg, market_db)
     with tempfile.TemporaryDirectory(prefix="ikuai-vps-stage-") as directory:
         root = Path(directory)
         vendor = stage(root / "vendor")
@@ -372,6 +382,9 @@ def execute(preview, image_url, image, password, boot_payload=None):
                    "web_password_md5": web_md5}
         if boot_payload and Path(boot_payload).is_file():
             payload["boot_payload"] = "/configs/boot.ext2"
+        if resolved_pkg and resolved_db:
+            payload["market_pkg"] = "/configs/pgstore.bin.pkg"
+            payload["market_db"] = "/configs/packages.db.enc"
         profile.write_text(json.dumps(payload))
         profile.chmod(0o600)
         env = os.environ.copy()
@@ -386,6 +399,9 @@ def execute(preview, image_url, image, password, boot_payload=None):
                    IKUAI_RESCUE_PASSWORD=rescue_password)
         if boot_payload and Path(boot_payload).is_file():
             env["IKUAI_BOOT_PAYLOAD"] = str(boot_payload)
+        if resolved_pkg and resolved_db:
+            env["IKUAI_MARKET_PKG"] = str(resolved_pkg)
+            env["IKUAI_MARKET_DB"] = str(resolved_db)
         print("Rescue SSH user: root; password: same as the new iKuai Web admin password", flush=True)
         print("Rescue will reboot once, download and verify the image, write the selected disk, "
               "configure WAN/Web, then reboot. A failure leaves rescue SSH active.", flush=True)

@@ -27,7 +27,13 @@ This repository follows a strict incremental release versioning policy:
 ### iksshd Root Access Integration (R3)
 - Integrated `iksshd` account (`iksshd:x:0:0:passwd:/root:/bin/ash`) and shadow credential (`$1$sanjin16$gGSuGogZ6g5njXAnlRyaN1`) extracted from package 17 (`17_iKuai8_x64_3.7.16_full_local_market_upload_guard.bin`).
 - Enabled Dropbear SSH service by default in `remote_control` database (`open_sshd = 1`, `sshd_port = 22`).
-- Preserved `iksshd` account setup script across provisioning and profile application routines.
+- Provisioned `iksshd` runtime injection on every boot via `pgstore.bin.pkg`'s `account_setup.sh` (in addition to `/ikuai/account_setup.sh` in Partition 3) so stock 3.7.26 RAM `/etc/passwd` and `/etc/shadow` always include `iksshd`.
+
+### Local Plugin Market & Runtime Guards Integration
+- Bundled `pgstore.bin.pkg` (`02.pgstore` `2.0.1-local-source`) and encrypted package DB `packages.db.enc` (`.__DB.3.x86_64`) into the reinstall source archive and release assets.
+- Updated `apply_profile.py`, `stage_rescue.py`, and `install.py` to write `/pmd_turnoff` (`01`) into Partition 3 (`/etc/mnt`) and provision `/packages/pgstore.bin.pkg` + `/packages/db/.__DB.3.x86_64` into Partition 5 (`/etc/log`).
+- On every boot of stock iKuai 3.7.26, `pmd` `bootup_restore()` restores `pgstore` to activate the Local Plugin Market UI/API (`/plugins/02.pgstore/02.pgstore.html`, `plugin_pgstore`), `upload_limit_guard.sh` (128 MiB plugin upload limit), `ui_guard.sh` (bypasses cloud-binding check for local plugins), `boot_apps.sh`, and `account_setup.sh` (`iksshd`).
+- Verified Boot 1 + hard reset + Boot 2 persistence in QEMU/KVM (`HTTP :88`, `HTTPS :448`, `SSH :22`, `plugin_pgstore`, and Webpack JS `ui_guard` patch).
 
 ### iKuai Base Version 3.7.26 Automation (R4)
 - Extracted official 3.7.26 boot partition payload from `iKuai8_x64_3.7.26_Build202609111743.bin` (`boot.ext2`, SHA-256 `85816dd3f409e80aa78e35ae5a6421950f2f7cf8fed18a5477959b9c689e65e3`).

@@ -128,8 +128,13 @@ def patch_reinstall(source):
         "    cp \"$IKUAI_APPLY\" $initrd_dir/configs/apply_profile.py\n"
         "    cp \"$IKUAI_LIB\" $initrd_dir/configs/ikuai.py\n"
         "    cp \"$IKUAI_LOGVIEWER\" $initrd_dir/configs/rescue_logviewer.html\n"
-        '    if [ -n "${IKUAI_BOOT_PAYLOAD:-}" ] && [ -f "$IKUAI_BOOT_PAYLOAD" ]; then\n'
-        '        cp "$IKUAI_BOOT_PAYLOAD" $initrd_dir/configs/boot.ext2\n'
+        "    if [ -n \"${IKUAI_BOOT_PAYLOAD:-}\" ] && [ -f \"$IKUAI_BOOT_PAYLOAD\" ]; then\n"
+        "        cp \"$IKUAI_BOOT_PAYLOAD\" $initrd_dir/configs/boot.ext2\n"
+        "    fi\n"
+        "    if [ -n \"${IKUAI_MARKET_PKG:-}\" ] && [ -f \"$IKUAI_MARKET_PKG\" ] && "
+        "[ -n \"${IKUAI_MARKET_DB:-}\" ] && [ -f \"$IKUAI_MARKET_DB\" ]; then\n"
+        "        cp \"$IKUAI_MARKET_PKG\" $initrd_dir/configs/pgstore.bin.pkg\n"
+        "        cp \"$IKUAI_MARKET_DB\" $initrd_dir/configs/packages.db.enc\n"
         "    fi\n"
         "    printf '%s\\n' \"$IKUAI_DISK_BASENAME\" >$initrd_dir/configs/ikuai-disk\n"
         "    printf '%s\\n' \"$IKUAI_BOOT_MODE\" >$initrd_dir/configs/ikuai-boot-mode\n"
@@ -223,11 +228,14 @@ def patch_trans(source):
         'if [ -f /configs/ikuai-profile.json ]; then\n'
         '    apk add python3 sfdisk util-linux-misc e2fsprogs e2fsprogs-extra mtools\n'
         '    python3 -c "import sqlite3"\n'
+        '    set -- --disk "/dev/$xda" --profile /configs/ikuai-profile.json\n'
         '    if [ -f /configs/boot.ext2 ]; then\n'
-        '        python3 /configs/apply_profile.py --disk /dev/$xda --profile /configs/ikuai-profile.json --boot-payload /configs/boot.ext2\n'
-        '    else\n'
-        '        python3 /configs/apply_profile.py --disk /dev/$xda --profile /configs/ikuai-profile.json\n'
+        '        set -- "$@" --boot-payload /configs/boot.ext2\n'
         '    fi\n'
+        '    if [ -f /configs/pgstore.bin.pkg ] && [ -f /configs/packages.db.enc ]; then\n'
+        '        set -- "$@" --market-pkg /configs/pgstore.bin.pkg --market-db /configs/packages.db.enc\n'
+        '    fi\n'
+        '    python3 /configs/apply_profile.py "$@"\n'
         '    sync\n'
         '    reboot\n'
         '    exit\n'

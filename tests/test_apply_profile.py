@@ -14,8 +14,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from apply_profile import (apply_iksshd_to_files, apply_profile, check_layout, disk_size, ensure_partition_device,
-                           expand_partitions,
-                           provision_identity, stable_partition_device, upgrade_boot)
+                           expand_partitions, install_local_market,
+                           provision_identity, replace_config, stable_partition_device, upgrade_boot,
+                           write_local_market_to_log_ext4)
 
 
 class ApplyProfileTests(unittest.TestCase):
@@ -169,16 +170,87 @@ class ApplyProfileTests(unittest.TestCase):
             }
             profile_file.write_text(json.dumps(profile_data))
             upgraded = {}
+            market = {}
             with patch("apply_profile.disk_size", return_value=8 * 1024**3), \
                  patch("apply_profile.verify_image"), \
                  patch("apply_profile.check_layout"), \
                  patch("apply_profile.upgrade_boot", side_effect=lambda d, p, m: upgraded.update(payload=p, mode=m)), \
                  patch("apply_profile.provision_identity"), \
                  patch("apply_profile.replace_config"), \
-                 patch("apply_profile.expand_partitions"):
+                 patch("apply_profile.expand_partitions"), \
+                 patch("apply_profile.install_local_market", side_effect=lambda d, p, db: market.update(pkg=p, db=db)):
                 result = apply_profile("/dev/vda", str(profile_file))
                 self.assertEqual(upgraded["payload"], str(boot_payload))
                 self.assertEqual(upgraded["mode"], "bios")
+                self.assertTrue(str(market["pkg"]).endswith("pgstore.bin.pkg"))
+                self.assertTrue(str(market["db"]).endswith("packages.db.enc"))
+
+    def test_write_local_market_to_log_ext4(self):
+        repo = Path(__file__).resolve().parents[1]
+        pkg = repo / "pgstore.bin.pkg"
+        db = repo / "packages.db.enc"
+        with tempfile.TemporaryDirectory() as tmp:
+            log_img = Path(tmp) / "log.ext4"
+            log_img.write_bytes(b"\0" * (8 * 1024 * 1024))
+            subprocess.run(["/sbin/mkfs.ext4", "-F", "-q", str(log_img)], check=True)
+            # Call twice to confirm overwrite idempotency
+            write_local_market_to_log_ext4(log_img, pkg, db)
+            write_local_market_to_log_ext4(log_img, pkg, db)
+            dumped_pkg = Path(tmp) / "out.pkg"
+            dumped_db = Path(tmp) / "out.db"
+            subprocess.run(["/sbin/debugfs", "-R", f"dump /packages/pgstore.bin.pkg {dumped_pkg}", str(log_img)],
+                           check=True, capture_output=True)
+            subprocess.run(["/sbin/debugfs", "-R", f"dump /packages/db/.__DB.3.x86_64 {dumped_db}", str(log_img)],
+                           check=True, capture_output=True)
+            self.assertEqual(dumped_pkg.read_bytes(), pkg.read_bytes())
+            self.assertEqual(dumped_db.read_bytes(), db.read_bytes())
+            stat_out = subprocess.check_output(
+                ["/sbin/debugfs", "-R", "stat /packages/pgstore.bin.pkg", str(log_img)],
+                text=True, stderr=subprocess.DEVNULL,
+            )
+            self.assertIn("Mode:  0644", stat_out)
+
+    def test_replace_config_writes_pmd_turnoff_and_iksshd_setup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            disk = Path(tmp) / "disk.raw"
+            config_part = Path(tmp) / "src_config.ext4"
+            config_part.write_bytes(b"\0" * (102400 * 512))
+            subprocess.run(["/sbin/mkfs.ext4", "-F", "-q", "-b", "1024", "-I", "128", str(config_part)], check=True)
+            seed_db = Path(tmp) / "seed.db"
+            con = sqlite3.connect(seed_db)
+            con.executescript("""
+                CREATE TABLE wan_config (name TEXT, bandif TEXT, internet INT, ip_mask TEXT, gateway TEXT, default_route INT);
+                INSERT INTO wan_config VALUES ('wan1', '', 1, '', '', 0);
+                CREATE TABLE lan_config (name TEXT, bandif TEXT, bandflag TEXT);
+                INSERT INTO lan_config VALUES ('lan1', '', '');
+                CREATE TABLE remote_control (id INT, open_wanweb INT, open_sshd INT, sshd_port INT, force_https INT, http_port INT, https_port INT);
+                INSERT INTO remote_control VALUES (1, 0, 0, 22, 1, 80, 443);
+                CREATE TABLE webuser (username TEXT, enabled TEXT, passwd TEXT);
+                INSERT INTO webuser VALUES ('admin', 'yes', 'old');
+            """)
+            con.commit()
+            con.close()
+            subprocess.run(["/sbin/debugfs", "-w", str(config_part)],
+                           input=f"mkdir /ikuai\nwrite {seed_db} /ikuai/config.db\n".encode(),
+                           check=True, capture_output=True)
+            with disk.open("wb") as handle:
+                handle.seek(114688 * 512)
+                handle.write(config_part.read_bytes())
+            from ikuai import NetworkProfile
+            profile = NetworkProfile("52:54:00:aa:bb:cc", "dhcp", "10.0.2.15", 24, "10.0.2.2")
+            replace_config(str(disk), profile, "a" * 32)
+            out_part = Path(tmp) / "out_config.ext4"
+            with disk.open("rb") as handle:
+                handle.seek(114688 * 512)
+                out_part.write_bytes(handle.read(102400 * 512))
+            pmd_file = Path(tmp) / "pmd_turnoff"
+            acc_file = Path(tmp) / "account_setup.sh"
+            subprocess.run(["/sbin/debugfs", "-R", f"dump /pmd_turnoff {pmd_file}", str(out_part)],
+                           check=True, capture_output=True)
+            subprocess.run(["/sbin/debugfs", "-R", f"dump /ikuai/account_setup.sh {acc_file}", str(out_part)],
+                           check=True, capture_output=True)
+            self.assertEqual(pmd_file.read_text(), "01\n")
+            self.assertIn("iksshd:", acc_file.read_text())
 
 
 if __name__ == "__main__":
