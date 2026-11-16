@@ -32,8 +32,11 @@ This repository follows a strict incremental release versioning policy:
 ### Local Plugin Market & Runtime Guards Integration
 - Bundled `pgstore.bin.pkg` (`02.pgstore` `2.0.1-local-source`) and encrypted package DB `packages.db.enc` (`.__DB.3.x86_64`) into the reinstall source archive and release assets.
 - Updated `apply_profile.py`, `stage_rescue.py`, and `install.py` to write `/pmd_turnoff` (`01`) into Partition 3 (`/etc/mnt`) and provision `/packages/pgstore.bin.pkg` + `/packages/db/.__DB.3.x86_64` into Partition 5 (`/etc/log`).
-- On every boot of stock iKuai 3.7.26, `pmd` `bootup_restore()` restores `pgstore` to activate the Local Plugin Market UI/API (`/plugins/02.pgstore/02.pgstore.html`, `plugin_pgstore`), `upload_limit_guard.sh` (128 MiB plugin upload limit), `ui_guard.sh` (bypasses cloud-binding check for local plugins), `boot_apps.sh`, and `account_setup.sh` (`iksshd`).
-- Verified Boot 1 + hard reset + Boot 2 persistence in QEMU/KVM (`HTTP :88`, `HTTPS :448`, `SSH :22`, `plugin_pgstore`, and Webpack JS `ui_guard` patch).
+- Hardened `pmd_guard.sh` in `pgstore.bin.pkg` so on live-internet routers stock `/usr/sbin/pmd` cannot connect to `pkgmanager.ikuai8.com` (ports `1863`/`15602`) after `bootup_restore()` and replace local `02.pgstore` with the cloud package: injects `127.0.0.1 pkgmanager.ikuai8.com` in `/etc/hosts`, inserts `OUTPUT` TCP `1863,15602` `REJECT` rules, wraps `/usr/sbin/pmd` + `/tmp/ikpkg/pmd/pmd`, patches `monitor_process.sh`, and terminates running `pmd` with `kill -9` shortly after `db restore finished`.
+
+### Unattended Installation & Console UX
+- Added password parameter support to `quick.sh` (`bash -s -- <password>`, `--password <password>`, `IKUAI_PASSWORD=<password>`) and `install.py` (`--password`, `--yes`) for non-interactive mass deployment.
+- Removed duplicate upstream `INFO / dd / (During installation only)` summary lines and `iksshd` hint from console output; now prints the exact password directly under both rescue SSH and post-install `admin` login URLs.
 
 ### iKuai Base Version 3.7.26 Automation (R4)
 - Extracted official 3.7.26 boot partition payload from `iKuai8_x64_3.7.26_Build202609111743.bin` (`boot.ext2`, SHA-256 `85816dd3f409e80aa78e35ae5a6421950f2f7cf8fed18a5477959b9c689e65e3`).

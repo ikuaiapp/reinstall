@@ -6,10 +6,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import install
 from install import (confirmed_ifupdown_dhcp, confirmed_ifupdown_static, execute, has_rescue_memory,
                      image_from_manifest, preflight, require_web_password,
-                     select_disk, verify_oracle_nat, verify_tencent_nat)
+                     select_disk, validate_web_password, verify_oracle_nat, verify_tencent_nat)
 from stage_rescue import patch_reinstall, patch_trans, stage
 
 
@@ -86,12 +88,41 @@ class InstallerTests(unittest.TestCase):
     def test_rescue_messages_describe_ikuai_password_and_erase_stage(self):
         source = (Path(__file__).resolve().parents[1] / "vendor/reinstall.sh").read_text()
         patched = patch_reinstall(source)
-        self.assertIn("救援 SSH：root，端口 22", patched)
-        self.assertIn("账号 admin，密码与救援 SSH 相同", patched)
-        self.assertIn("新系统 SSH 默认开启，端口 22，账号 iksshd", patched)
+        self.assertIn("救援 SSH：root，端口 22；密码：$password", patched)
+        self.assertIn("账号 admin，密码：$password", patched)
+        self.assertNotIn("iksshd", patched)
+        self.assertNotIn("密码与救援 SSH 相同", patched)
+        self.assertIn('if [ -n "${IKUAI_PROFILE:-}" ]; then\n        show_dd_tips', patched)
         self.assertIn("此阶段不再提供取消命令", patched)
         self.assertIn('IKUAI_PUBLIC_IP:-IP', patched)
         self.assertNotIn("镜像的用户名/密码/公钥不会被修改。", patched)
+
+    def test_explicit_password_skips_prompts_and_sets_web_password(self):
+        self.assertEqual(validate_web_password("MyPass@123"), "MyPass@123")
+        self.assertEqual(require_web_password("MyPass@123"), "MyPass@123")
+        for bad in ("", "has space", "nonascii密码", "tab\there"):
+            with self.assertRaises(ValueError):
+                validate_web_password(bad)
+
+        preview = {"disk": "/dev/vda", "boot_mode": "bios", "network": {"mode": "dhcp"}, "public_ip": "198.51.100.10"}
+        manifest = {"images": {"bios": {"filename": "ikuai-3.7.16-bios.raw.gz", "sha256": "a" * 64, "raw_sha256": "b" * 64}}}
+        recorded = {}
+        argv = [
+            "install.py",
+            "--manifest-url", "https://github.com/ikuaiapp/reinstall/releases/download/v0.01/ikuai-cloud-v1-manifest.json",
+            "--manifest-sha256", "c" * 64,
+            "--password", "MyPass@123",
+            "--execute",
+        ]
+        with patch.object(sys, "argv", argv), \
+             patch("install.preflight", return_value=preview), \
+             patch("install.load_manifest", return_value=manifest), \
+             patch("install.resolve_boot_payload", return_value=None), \
+             patch("builtins.input", side_effect=AssertionError("input should not be called")), \
+             patch("install.timed_getpass", side_effect=AssertionError("getpass should not be called")), \
+             patch("install.execute", side_effect=lambda prev, url, img, pwd, boot_payload=None: recorded.update(password=pwd, url=url)):
+            install.main()
+        self.assertEqual(recorded["password"], "MyPass@123")
 
     def test_ikuai_rescue_pins_matching_alpine_boot_files(self):
         source = (Path(__file__).resolve().parents[1] / "vendor/reinstall.sh").read_text()

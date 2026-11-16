@@ -33,20 +33,28 @@
 
 ## 快速安装方式
 
-在已备份并确认可以清空系统盘的 VPS 实例上，以 root 权限在交互终端执行：
+在已备份并确认可以清空系统盘的 VPS 实例上，以 root 权限执行。
+
+**无人值守一键安装（推荐，直接传入密码参数，无需交互确认）：**
+
+```sh
+curl -fsSL https://github.com/ikuaiapp/reinstall/releases/download/v0.01/quick.sh | bash -s -- <你的爱快密码>
+```
+
+也支持 `--password <密码>` 或环境变量 `IKUAI_PASSWORD=<密码>`；`admin` 管理员与救援环境 SSH 共用该密码。
+
+**交互式安装（不传密码参数）：**
 
 ```sh
 curl -fsSL https://github.com/ikuaiapp/reinstall/releases/download/v0.01/quick.sh | bash
 ```
 
 脚本会校验下载的源码包及镜像清单，再显示即将清空的磁盘。
-密码可以输入并确认两次；任一步骤 30 秒未输入则自动生成一组 10 位密码并打印在终端。该密码同时用于救援环境 SSH 及爱快 Web 管理员（用户名为 `admin`）。
-输入 `ERASE /dev/设备名` 确认清空目标磁盘并启动救援流程；随后系统自动重启进入 Alpine 救援内存环境，完成校验、写盘、网络配置并最终重启进入爱快 3.7.26。
+交互模式下可输入并确认两次 10 位密码（超时 30 秒则自动生成），输入 `ERASE /dev/设备名` 确认后启动救援流程；无人值守模式下自动确认并直接在控制台输出救援信息及完成后的 `admin` 登录密码。
 
 安装完成后，可通过以下地址访问管理界面：
 - HTTP: `http://<公网IP>:88/`
 - HTTPS: `https://<公网IP>:448/`
-- SSH: `ssh -p 22 iksshd@<公网IP>`
 
 ## 离线 / 手工分步执行
 

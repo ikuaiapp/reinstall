@@ -310,7 +310,17 @@ def generate_password():
             return password
 
 
-def require_web_password():
+def validate_web_password(password):
+    if (not isinstance(password, str) or not (1 <= len(password) <= 64) or
+            not password.isascii() or not password.isprintable() or
+            any(char.isspace() for char in password)):
+        raise ValueError("password must be 1-64 printable non-whitespace ASCII characters")
+    return password
+
+
+def require_web_password(explicit_password=None):
+    if explicit_password is not None:
+        return validate_web_password(explicit_password)
     try:
         first = timed_getpass("New iKuai Web admin and rescue SSH password (10 chars; 30s timeout): ")
         second = timed_getpass("Repeat password (30s timeout): ")
@@ -402,7 +412,6 @@ def execute(preview, image_url, image, password, boot_payload=None,
         if resolved_pkg and resolved_db:
             env["IKUAI_MARKET_PKG"] = str(resolved_pkg)
             env["IKUAI_MARKET_DB"] = str(resolved_db)
-        print("Rescue SSH user: root; password: same as the new iKuai Web admin password", flush=True)
         print("Rescue will reboot once, download and verify the image, write the selected disk, "
               "configure WAN/Web, then reboot. A failure leaves rescue SSH active.", flush=True)
         subprocess.run(["bash", str(vendor / "reinstall.sh"), "dd", "--img", image_url,
@@ -419,6 +428,10 @@ def main():
                         help="optional path to 3.7.26 boot payload (default: auto-detected or downloaded)")
     parser.add_argument("--execute", action="store_true",
                         help="confirm and stage an irreversible system-disk rewrite")
+    parser.add_argument("--password", default=os.environ.get("IKUAI_PASSWORD"),
+                        help="new iKuai Web admin and rescue SSH password (enables non-interactive confirmation)")
+    parser.add_argument("--yes", action="store_true",
+                        help="skip interactive disk erase confirmation")
     parser.add_argument("--tencent-nat-public-ip",
                         help="opt in to Tencent Cloud DHCP/NAT after metadata and public IP checks")
     parser.add_argument("--oracle-nat-public-ip",
@@ -434,10 +447,11 @@ def main():
     if not args.execute:
         print("Preflight only: no reboot or disk write. Use --execute to continue.")
         return
-    password = require_web_password()
-    answer = input(f"Type ERASE {preview['disk']} to destroy that disk and stage rescue: ")
-    if answer != f"ERASE {preview['disk']}":
-        raise ValueError("confirmation did not match; no changes made")
+    password = require_web_password(args.password)
+    if not (args.yes or args.password is not None):
+        answer = input(f"Type ERASE {preview['disk']} to destroy that disk and stage rescue: ")
+        if answer != f"ERASE {preview['disk']}":
+            raise ValueError("confirmation did not match; no changes made")
     boot_payload = resolve_boot_payload(args.manifest_url, manifest, getattr(args, "boot_payload", None))
     execute(preview, image_url, image, password, boot_payload=boot_payload)
 

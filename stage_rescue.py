@@ -49,10 +49,9 @@ def patch_reinstall(source):
         "}",
         "show_dd_tips() {\n"
         "    warn false '********** 爱快重装说明 **********'\n"
-        "    warn false '救援 SSH：root，端口 22；密码是刚设置或自动生成的 10 位密码。'\n"
-        '    warn false "安装进度网页：$(get_http_log_url)；仅在救援环境运行时可访问。"\n'
-        '    warn false "完成后访问：http://${IKUAI_PUBLIC_IP:-公网IP}:88 或 https://${IKUAI_PUBLIC_IP:-公网IP}:448；账号 admin，密码与救援 SSH 相同。"\n'
-        "    warn false '新系统 SSH 默认开启，端口 22，账号 iksshd。'\n"
+        '    warn false "救援 SSH：root，端口 22；密码：$password（仅安装期间有效）"\n'
+        '    warn false "安装进度网页：$(get_http_log_url)（仅安装期间可访问）"\n'
+        '    warn false "完成后访问：http://${IKUAI_PUBLIC_IP:-公网IP}:88 或 https://${IKUAI_PUBLIC_IP:-公网IP}:448；账号 admin，密码：$password"\n'
         "    warn false '**********************************'\n"
         "}",
     )
@@ -140,6 +139,54 @@ def patch_reinstall(source):
         "    printf '%s\\n' \"$IKUAI_BOOT_MODE\" >$initrd_dir/configs/ikuai-boot-mode\n"
         "    printf '%s  %s\\n' \"$IKUAI_COMPRESSED_SHA256\" /tmp/ikuai.raw.gz "
         ">$initrd_dir/configs/ikuai-image.sha256\n",
+    )
+    source = replace_once(
+        source,
+        "info 'info'\n"
+        'echo "$distro $releasever"\n',
+        'if [ -z "${IKUAI_PROFILE:-}" ]; then\n'
+        "    info 'info'\n"
+        '    echo "$distro $releasever"\n'
+        "fi\n",
+    )
+    source = replace_once(
+        source,
+        'elif [ "$distro" = dd ]; then\n'
+        '    echo "Username: $username (During installation only)"\n'
+        '    if [ -n "$ssh_keys" ]; then\n'
+        '        echo "Public Key: $ssh_keys (During installation only)"\n'
+        '    else\n'
+        '        echo "Password: $password (During installation only)"\n'
+        '    fi\n'
+        '    echo "SSH Port: $ssh_port (During installation only)"\n'
+        '    echo "WEB: $(get_http_log_url) (During installation only)"\n\n'
+        '    if [ -n "$cloud_data" ]; then\n'
+        '        echo "Cloud Data: $cloud_data"\n'
+        '        echo "Cloud Data Files: $cloud_data_files"\n'
+        '    else\n'
+        '        echo\n'
+        '        show_dd_tips\n'
+        '    fi\n',
+        'elif [ "$distro" = dd ]; then\n'
+        '    if [ -n "${IKUAI_PROFILE:-}" ]; then\n'
+        '        show_dd_tips\n'
+        '    else\n'
+        '        echo "Username: $username (During installation only)"\n'
+        '        if [ -n "$ssh_keys" ]; then\n'
+        '            echo "Public Key: $ssh_keys (During installation only)"\n'
+        '        else\n'
+        '            echo "Password: $password (During installation only)"\n'
+        '        fi\n'
+        '        echo "SSH Port: $ssh_port (During installation only)"\n'
+        '        echo "WEB: $(get_http_log_url) (During installation only)"\n\n'
+        '        if [ -n "$cloud_data" ]; then\n'
+        '            echo "Cloud Data: $cloud_data"\n'
+        '            echo "Cloud Data Files: $cloud_data_files"\n'
+        '        else\n'
+        '            echo\n'
+        '            show_dd_tips\n'
+        '        fi\n'
+        '    fi\n',
     )
     source = replace_once(
         source,
