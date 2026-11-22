@@ -335,7 +335,7 @@ def require_web_password(explicit_password=None):
     return first
 
 
-BOOT_PAYLOAD_SHA256 = "85816dd3f409e80aa78e35ae5a6421950f2f7cf8fed18a5477959b9c689e65e3"
+BOOT_PAYLOAD_SHA256 = "3f3116ec092305f01915457bd65e92a9a4b7ee9ed4a4b2ce6342cbc5c4d524f0"
 BOOT_PAYLOAD_SIZE = 52428800
 
 

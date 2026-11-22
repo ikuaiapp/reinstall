@@ -109,7 +109,7 @@ class InstallerTests(unittest.TestCase):
         recorded = {}
         argv = [
             "install.py",
-            "--manifest-url", "https://github.com/ikuaiapp/reinstall/releases/download/v0.01/ikuai-cloud-v1-manifest.json",
+            "--manifest-url", "https://github.com/ikuaiapp/reinstall/releases/download/v0.02/ikuai-cloud-v1-manifest.json",
             "--manifest-sha256", "c" * 64,
             "--password", "MyPass@123",
             "--execute",
@@ -123,6 +123,8 @@ class InstallerTests(unittest.TestCase):
              patch("install.execute", side_effect=lambda prev, url, img, pwd, boot_payload=None: recorded.update(password=pwd, url=url)):
             install.main()
         self.assertEqual(recorded["password"], "MyPass@123")
+        self.assertEqual(install.BOOT_PAYLOAD_SHA256,
+                         "3f3116ec092305f01915457bd65e92a9a4b7ee9ed4a4b2ce6342cbc5c4d524f0")
 
     def test_ikuai_rescue_pins_matching_alpine_boot_files(self):
         source = (Path(__file__).resolve().parents[1] / "vendor/reinstall.sh").read_text()

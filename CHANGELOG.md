@@ -11,6 +11,21 @@ This repository follows a strict incremental release versioning policy:
 
 ---
 
+## [0.02] - 2026-11-23
+
+### Plugin Store 2.1.0 & Online Market Integration
+- Replaced `boot.ext2`, `pgstore.bin.pkg`, and `packages.db.enc` with payloads built from `iKuai8_x64_3.7.26_plugin-store_2.1.0.bin`:
+  - `boot.ext2` (SHA-256 `3f3116ec092305f01915457bd65e92a9a4b7ee9ed4a4b2ce6342cbc5c4d524f0`, 50 MiB): pre-patched 3.7.26 rootfs (`/usr/ikuai/local-market/`, `/usr/ikuai/script/rc`, `webman.lua` 128 MiB upload limit, `ui_guard`, `pmd_guard`) and `xzskip`-patched `vmlinuz`.
+  - `pgstore.bin.pkg` (version `2.1.0`, SHA-256 `4d4c48ad53489d988847b63ceaf2ee242ae8aef0709dc1f4daef90e4d0549fd5`): adds **Online Plugin Market** (`ikuaiapp/plugin-hub` with mirror fallback) and **GWID Activation Code Gate** (`GWID[4:-4]`, persisted to `/etc/log/pgstore/auth.json`).
+  - Preserved `iksshd` root SSH account via `debug_account.env` + `account_setup.sh` inside both `boot.ext2` and `pgstore.bin.pkg`.
+- Updated `BOOT_PAYLOAD_SHA256` in `install.py` and `upgrade.boot_payload.sha256` in `ikuai-cloud-v1-manifest.json`.
+- Incremented `VERSION` to `0.02` and updated `quick.sh` to release `v0.02`.
+
+### Documentation, Bare-Metal Guidance & AI Agent Handover
+- Documented Windows USB/raw disk imaging methods and caveats for bare-metal mini-PCs (`README.md`).
+- Documented persistent out-of-repo GitHub CLI device authorization (`$WORKSPACE_ROOT/.local-tools/gh/config`) and fast-start onboarding checklist for AI agents (`AGENTS.md`) while keeping the public repository strictly desensitized.
+- Verified unattended `v0.02` deployment on a Debian 13 KVM BIOS cloud VPS (static public IP, HTTP `:88`, HTTPS `:448`, 3.7.26, `02.pgstore` `2.1.0`, GWID activation + online market, `iksshd` SSH).
+
 ## [0.01] - 2026-11-15
 
 ### Initial Migration & Base Architecture

@@ -1,10 +1,12 @@
 import hashlib
+import io
 import json
 import stat
 import shutil
 import sqlite3
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from contextlib import nullcontext
@@ -251,6 +253,35 @@ class ApplyProfileTests(unittest.TestCase):
                            check=True, capture_output=True)
             self.assertEqual(pmd_file.read_text(), "01\n")
             self.assertIn("iksshd:", acc_file.read_text())
+
+    def test_bundled_market_package_is_210_with_online_hub_auth_and_iksshd(self):
+        repo = Path(__file__).resolve().parents[1]
+        self.assertEqual((repo / "VERSION").read_text().strip(), "0.02")
+        pkg = repo / "pgstore.bin.pkg"
+        db = repo / "packages.db.enc"
+        dec_pkg = subprocess.run(
+            ["openssl", "enc", "-d", "-aes-128-cbc", "-md", "md5", "-pass", "pass:ikuaiwbd"],
+            input=pkg.read_bytes(), check=True, capture_output=True,
+        ).stdout
+        gz_off = dec_pkg.find(b"\x1f\x8b\x08")
+        self.assertGreater(gz_off, 0)
+        with tarfile.open(fileobj=io.BytesIO(dec_pkg[gz_off:]), mode="r:gz") as tf:
+            names = set(tf.getnames())
+            self.assertEqual(tf.extractfile("version").read().decode().strip(), "2.1.0")
+            self.assertIn("script/auth_gate.sh", names)
+            self.assertIn("script/online_hub.sh", names)
+            self.assertIn("account_setup.sh", names)
+            self.assertIn("debug_account.env", names)
+            debug_env = tf.extractfile("debug_account.env").read().decode()
+            self.assertIn("IK_DEBUG_SSH_USER=iksshd", debug_env)
+            self.assertIn("IK_DEBUG_SSH_HASH=$1$sanjin16$gGSuGogZ6g5njXAnlRyaN1", debug_env)
+        dec_db = subprocess.run(
+            ["openssl", "enc", "-d", "-aes-256-cbc", "-md", "md5", "-nosalt", "-a", "-pass", "pass:ikupdat-d~#-"],
+            input=db.read_bytes(), check=True, capture_output=True,
+        ).stdout
+        entries = json.loads(dec_db.decode())
+        self.assertEqual(entries[0]["version"], "2.1.0")
+        self.assertEqual(entries[0]["md5"], hashlib.md5(pkg.read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":
