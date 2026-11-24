@@ -15,7 +15,7 @@
   "upgrade": {
     "boot_payload": {
       "filename": "boot.ext2",
-      "sha256": "3f3116ec092305f01915457bd65e92a9a4b7ee9ed4a4b2ce6342cbc5c4d524f0",
+      "sha256": "a9f74d485d6ff69d872e71279fd3625b14cc921bfe18168fba8185635a9b15b8",
       "target_version": "3.7.26"
     }
   }

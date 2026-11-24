@@ -48,9 +48,9 @@ if [[ -z "$user_password" ]] && [[ ! -r /dev/tty ]]; then
   exit 1
 fi
 
-release='https://github.com/ikuaiapp/reinstall/releases/download/v0.02'
-source_sha='7b0c686c2f33cd86f83c3a4c9e0196430b4f0b3c8438b03bcd1982e777f0a74a'
-manifest_sha='df70956989978445bcc9a037cfc60e32f50df5b42bc924d933d70f4ff2d05c0f'
+release='https://github.com/ikuaiapp/reinstall/releases/download/v0.03'
+source_sha='6dfc47c517858bfa2221c23fda4bf233c2aa125338d639a9771447ab9c864851'
+manifest_sha='117d718d6731b2fb2ca7c1ff9ce8555b76e6d53ebfa0ca174d915fd9d35212f0'
 provider_args=()
 if public_ip=$(curl --noproxy '*' -fsS --max-time 3 \
     http://169.254.0.23/latest/meta-data/public-ipv4 2>/dev/null); then

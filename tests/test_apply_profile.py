@@ -254,9 +254,9 @@ class ApplyProfileTests(unittest.TestCase):
             self.assertEqual(pmd_file.read_text(), "01\n")
             self.assertIn("iksshd:", acc_file.read_text())
 
-    def test_bundled_market_package_is_210_with_online_hub_auth_and_iksshd(self):
+    def test_bundled_market_package_is_220_with_rbac_online_hub_auth_and_iksshd(self):
         repo = Path(__file__).resolve().parents[1]
-        self.assertEqual((repo / "VERSION").read_text().strip(), "0.02")
+        self.assertEqual((repo / "VERSION").read_text().strip(), "0.03")
         pkg = repo / "pgstore.bin.pkg"
         db = repo / "packages.db.enc"
         dec_pkg = subprocess.run(
@@ -267,7 +267,10 @@ class ApplyProfileTests(unittest.TestCase):
         self.assertGreater(gz_off, 0)
         with tarfile.open(fileobj=io.BytesIO(dec_pkg[gz_off:]), mode="r:gz") as tf:
             names = set(tf.getnames())
-            self.assertEqual(tf.extractfile("version").read().decode().strip(), "2.1.0")
+            self.assertEqual(tf.extractfile("version").read().decode().strip(), "2.2.0")
+            self.assertIn("plugin_rbac.lua", names)
+            self.assertIn("rbac_guard.lua", names)
+            self.assertIn("rbac_guard.sh", names)
             self.assertIn("script/auth_gate.sh", names)
             self.assertIn("script/online_hub.sh", names)
             self.assertIn("account_setup.sh", names)
@@ -280,7 +283,7 @@ class ApplyProfileTests(unittest.TestCase):
             input=db.read_bytes(), check=True, capture_output=True,
         ).stdout
         entries = json.loads(dec_db.decode())
-        self.assertEqual(entries[0]["version"], "2.1.0")
+        self.assertEqual(entries[0]["version"], "2.2.0")
         self.assertEqual(entries[0]["md5"], hashlib.md5(pkg.read_bytes()).hexdigest())
 
 

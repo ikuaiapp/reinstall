@@ -11,6 +11,16 @@ This repository follows a strict incremental release versioning policy:
 
 ---
 
+## [0.03] - 2026-11-25
+
+### Plugin Store 2.2.0 & Multi-Account Per-Plugin RBAC Integration
+- Replaced `boot.ext2`, `pgstore.bin.pkg`, and `packages.db.enc` with payloads built from `iKuai8_x64_3.7.26_plugin-store_2.2.0.bin`:
+  - `boot.ext2` (SHA-256 `a9f74d485d6ff69d872e71279fd3625b14cc921bfe18168fba8185635a9b15b8`, 50 MiB): pre-patched 3.7.26 rootfs (`/usr/ikuai/local-market/`, `/usr/ikuai/script/rc`, `webman.lua` 128 MiB upload limit + RBAC hook, `/usr/openresty/lua/lib/{plugin_rbac.lua,rbac_guard.lua}`, `/usr/ikuai/script/plugins.sh`, `154.*.js.gz` & `8.*.js.gz` UI patches, `monitor_process.sh` `pmd_guard`) and `xzskip`-patched `vmlinuz`.
+  - `pgstore.bin.pkg` (version `2.2.0`, SHA-256 `2fbc73e694cd5eb0372b32c3e72238b3fbd7a6ffb7b46de1137bb12956859a27`) and `packages.db.enc` (SHA-256 `2553b4b7ce028d25742f67e5316419d1641c6a187081dd2e1ca86a3b84982c50`): adds **multi-account per-plugin RBAC** ("系统设置 -> 登录管理 -> 账号设置 -> 插件管理" 3-level plugin permission tree supporting independent view `r` / modify `x` / hidden per plugin, `perm_default` inheritance for newly installed plugins, and `02.pgstore` read-only mode), while keeping Online Plugin Market (`ikuaiapp/plugin-hub`) and GWID Activation Code Gate (`GWID[4:-4]`).
+  - Preserved `iksshd` root SSH account via `debug_account.env` + `account_setup.sh` inside both `boot.ext2` and `pgstore.bin.pkg`.
+- Updated `BOOT_PAYLOAD_SHA256` in `install.py` and `upgrade.boot_payload.sha256` in `ikuai-cloud-v1-manifest.json`.
+- Incremented `VERSION` to `0.03`, updated `quick.sh` to release `v0.03`, and added RBAC payload assertions to `tests/test_apply_profile.py`.
+
 ## [0.02] - 2026-11-23
 
 ### Plugin Store 2.1.0 & Online Market Integration
